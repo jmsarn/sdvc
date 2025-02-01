@@ -1,0 +1,6 @@
+outs:
+- sha256: c2ce3f73d9fa60c8c1c586062941922001219f392f9db18f8ebc9fca5c9b9f86
+  size: 24
+  hash: sha256
+  path: test.txt
+  cloud: {}
