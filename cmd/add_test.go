@@ -23,7 +23,7 @@ func Test_ExecuteAddCommand(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	//defer os.RemoveAll(testDataDir)
+	defer os.RemoveAll(filepath.Join(".", "test"))
 
 	testFile := filepath.Join(testDataDir, "test.txt")
 	f := []byte("this is a test data file")
