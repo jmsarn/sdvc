@@ -1,4 +1,4 @@
-package cmd
+package utils
 
 import (
 	"crypto/sha256"
@@ -18,7 +18,7 @@ type Cache struct {
 }
 
 func (c *Cache) Save() error {
-	configPath, err := getProjectConfigPath()
+	configPath, err := ProjectConfigPath()
 	if err != nil {
 		return err
 	}
@@ -43,14 +43,14 @@ func (c *Config) Save() error {
 	return err
 }
 
-func exists(path string) bool {
+func Exists(path string) bool {
 	if _, err := os.Stat(path); err != nil {
 		return false
 	}
 	return true
 }
 
-func findGitRoot() (string, error) {
+func ProjectRoot() (string, error) {
 	currentDir, err := os.Getwd()
 	if err != nil {
 		return "", err
@@ -59,7 +59,7 @@ func findGitRoot() (string, error) {
 	// Traverse up the directory tree looking for .git directory
 	for {
 		gitDir := filepath.Join(currentDir, ".git")
-		if exists(gitDir) {
+		if Exists(gitDir) {
 			return currentDir, nil
 		}
 		parentDir := filepath.Dir(currentDir)
@@ -70,14 +70,14 @@ func findGitRoot() (string, error) {
 	}
 }
 
-func rootRelativePath(path string) string {
-	pRoot, _ := findGitRoot()
+func RootRelativePath(path string) string {
+	pRoot, _ := ProjectRoot()
 	p, _ := filepath.Rel(pRoot, filepath.Join(pRoot, path))
 	return p
 }
 
-func getProjectConfigPath() (string, error) {
-	gitRoot, err := findGitRoot()
+func ProjectConfigPath() (string, error) {
+	gitRoot, err := ProjectRoot()
 	if err != nil {
 		return "", err
 	}
@@ -85,15 +85,15 @@ func getProjectConfigPath() (string, error) {
 	return configPath, nil
 }
 
-func readConfig(local bool) (*Config, error) {
-	configPath, err := getProjectConfigPath()
+func ReadConfig(local bool) (*Config, error) {
+	configPath, err := ProjectConfigPath()
 	if err != nil {
 		return nil, err
 	}
 	var cfg *ini.File
 	if local {
 		configPath = fmt.Sprint(configPath, ".local")
-		if !exists(configPath) {
+		if !Exists(configPath) {
 			cfg = ini.Empty()
 			if err = cfg.SaveTo(configPath); err != nil {
 				return nil, err
@@ -107,8 +107,47 @@ func readConfig(local bool) (*Config, error) {
 	return &Config{configPath, cfg}, nil
 }
 
-func readCache() (*Cache, error) {
-	configPath, err := getProjectConfigPath()
+func ReadRemoteConfig(remoteName string) (*ini.Section, error) {
+	cfg, err := ReadConfig(false)
+	if err != nil {
+		return nil, errors.New(fmt.Sprintf("Error reading %s: %s", cfg.Path, err))
+	}
+	if remoteName == "default" {
+		sec, _ := cfg.File.GetSection("core")
+		key, err := sec.GetKey("remote")
+		if err != nil {
+			return nil, errors.New("No default remote specified")
+		}
+		remoteName = key.String()
+	}
+	r, err := cfg.File.GetSection(fmt.Sprintf(`remote "%s"`, remoteName))
+	if err != nil {
+		return nil, errors.New(
+			fmt.Sprintf("Error reading configuration for remote %s\n", remoteName),
+		)
+	}
+	// Update remote configuration with values from config.local
+	cfgLocal, err := ReadConfig(true)
+	if err == nil {
+		rLocal, err := cfgLocal.File.GetSection(
+			fmt.Sprintf(`remote "%s"`, remoteName),
+		)
+		if err == nil {
+			for k, v := range rLocal.KeysHash() {
+				if r.HasKey(k) {
+					k_, _ := r.GetKey(k)
+					k_.SetValue(v)
+				} else {
+					r.NewKey(k, v)
+				}
+			}
+		}
+	}
+	return r, nil
+}
+
+func ReadCache() (*Cache, error) {
+	configPath, err := ProjectConfigPath()
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +168,7 @@ func readCache() (*Cache, error) {
 	return &Cache{Files: files}, nil
 }
 
-func fileHash(path string) (string, error) {
+func FileSHA256(path string) (string, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return "", err

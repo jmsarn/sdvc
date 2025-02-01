@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"regexp"
 
+	"github.com/jmsarn/sdvc/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -31,7 +32,7 @@ var remoteAddCmd = &cobra.Command{
 		name := args[0]
 		url := args[1]
 		useLocal, _ := cmd.Flags().GetBool("local")
-		cfg, err := readConfig(useLocal)
+		cfg, err := utils.ReadConfig(useLocal)
 		if err != nil {
 			return errors.New(fmt.Sprintf("Error reading %s: %s", cfg.Path, err))
 		}
@@ -47,7 +48,7 @@ var remoteDefaultCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
 		useLocal, _ := cmd.Flags().GetBool("local")
-		cfg, err := readConfig(useLocal)
+		cfg, err := utils.ReadConfig(useLocal)
 		if err != nil {
 			return errors.New(fmt.Sprintf("Error reading %s: %s", cfg.Path, err))
 		}
@@ -68,7 +69,7 @@ var remoteModifyCmd = &cobra.Command{
 			val = args[2]
 		}
 		useLocal, _ := cmd.Flags().GetBool("local")
-		cfg, err := readConfig(useLocal)
+		cfg, err := utils.ReadConfig(useLocal)
 		if err != nil {
 			return errors.New(fmt.Sprintf("Error reading %s: %s", cfg.Path, err))
 		}
@@ -82,7 +83,7 @@ var remoteListCmd = &cobra.Command{
 	Long:  "Setup and manage data remotes",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		useLocal, _ := cmd.Flags().GetBool("local")
-		cfg, err := readConfig(useLocal)
+		cfg, err := utils.ReadConfig(useLocal)
 		if err != nil {
 			return errors.New(fmt.Sprintf("Error reading %s: %s", cfg.Path, err))
 		}
@@ -97,7 +98,7 @@ var remoteRemoveCmd = &cobra.Command{
 	Long:  "Remove a data remote",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		useLocal, _ := cmd.Flags().GetBool("local")
-		cfg, err := readConfig(useLocal)
+		cfg, err := utils.ReadConfig(useLocal)
 		if err != nil {
 			return errors.New(fmt.Sprintf("Error reading %s: %s", cfg.Path, err))
 		}
@@ -114,7 +115,7 @@ var remoteRenameCmd = &cobra.Command{
 	},
 }
 
-func addRemote(name, url string, cfg *Config) error {
+func addRemote(name, url string, cfg *utils.Config) error {
 	if _, err := cfg.File.GetSection(fmt.Sprintf(`remote "%s"`, name)); err != nil {
 		return errors.New(fmt.Sprintf(
 			"Remote %s already exists, use remote modify to edit remote configuration",
@@ -129,7 +130,7 @@ func addRemote(name, url string, cfg *Config) error {
 	return nil
 }
 
-func listRemotes(cfg *Config) error {
+func listRemotes(cfg *utils.Config) error {
 	re := regexp.MustCompile(`remote\s+"([^"]*)"`)
 	for _, sec := range cfg.File.Sections() {
 		name := sec.Name()
@@ -141,7 +142,7 @@ func listRemotes(cfg *Config) error {
 	}
 	return nil
 }
-func modifyRemote(name, opt, val string, cfg *Config, useLocal bool) error {
+func modifyRemote(name, opt, val string, cfg *utils.Config, useLocal bool) error {
 	sec, err := cfg.File.GetSection(fmt.Sprintf(`remote "%s"`, name))
 	if sec == nil && !useLocal {
 		return errors.New(fmt.Sprintf(
@@ -178,7 +179,7 @@ func modifyRemote(name, opt, val string, cfg *Config, useLocal bool) error {
 	}
 	return nil
 }
-func removeRemote(name string, cfg *Config) error {
+func removeRemote(name string, cfg *utils.Config) error {
 	cfg.File.DeleteSection(fmt.Sprintf(`remote "%s"`, name))
 	if err := cfg.Save(); err != nil {
 		return errors.New(fmt.Sprintf("Error saving %s: %s\n", cfg.Path, err))
@@ -186,7 +187,7 @@ func removeRemote(name string, cfg *Config) error {
 	return nil
 }
 
-func setDefaultRemote(name string, cfg *Config) error {
+func setDefaultRemote(name string, cfg *utils.Config) error {
 	sec, _ := cfg.File.GetSection("core")
 	key, err := sec.GetKey("remote")
 	if err != nil {

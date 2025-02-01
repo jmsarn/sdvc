@@ -1,4 +1,4 @@
-package storage
+package remote
 
 import (
 	"context"
@@ -21,14 +21,14 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
-type S3Storage struct {
+type S3Remote struct {
 	Client     *s3.Client
 	Downloader *manager.Downloader
 	Prefix     string
 	Uploader   *manager.Uploader
 }
 
-func NewS3Storage(prefix string, storageConfig map[string]string) *S3Storage {
+func NewS3Remote(prefix string, storageConfig map[string]string) *S3Remote {
 	cfg, _ := config.LoadDefaultConfig(context.TODO())
 	if profile, ok := storageConfig["profile"]; ok {
 		slog.Debug(fmt.Sprintf("Using profile %s", profile))
@@ -55,7 +55,7 @@ func NewS3Storage(prefix string, storageConfig map[string]string) *S3Storage {
 	}
 	downloader := manager.NewDownloader(client)
 	uploader := manager.NewUploader(client)
-	return &S3Storage{
+	return &S3Remote{
 		Client:     client,
 		Downloader: downloader,
 		Prefix:     prefix,
@@ -63,7 +63,7 @@ func NewS3Storage(prefix string, storageConfig map[string]string) *S3Storage {
 	}
 }
 
-func (s *S3Storage) CheckLocalObject(obj StorageObject) (bool, error) {
+func (s *S3Remote) CheckLocalObject(obj FileObject) (bool, error) {
 	file, err := os.Open(obj.LocalPath)
 	if err != nil {
 		return false, err
@@ -82,11 +82,12 @@ func (s *S3Storage) CheckLocalObject(obj StorageObject) (bool, error) {
 	return localHash == remoteHash, nil
 }
 
-func (s *S3Storage) Download(obj StorageObject) error {
-	if !isValidURI(obj.RemotePath) {
-		return os.ErrInvalid
+func (s *S3Remote) Download(obj FileObject) error {
+	remotePath, _ := url.JoinPath(s.Prefix, obj.LocalPath)
+	if !isValidS3URI(remotePath) {
+		return errors.New(fmt.Sprintf("%s is not a valid S3 URI", remotePath))
 	}
-	bucket, key := parseURI(obj.RemotePath)
+	bucket, key := parseURI(remotePath)
 	file, err := os.Create(obj.LocalPath)
 	if err != nil {
 		return err
@@ -106,11 +107,12 @@ func (s *S3Storage) Download(obj StorageObject) error {
 	return nil
 }
 
-func (s *S3Storage) GetSHA256(obj StorageObject) (string, error) {
-	if !isValidURI(obj.RemotePath) {
+func (s *S3Remote) GetSHA256(obj FileObject) (string, error) {
+	remotePath, _ := url.JoinPath(s.Prefix, obj.LocalPath)
+	if !isValidS3URI(remotePath) {
 		return "", os.ErrInvalid
 	}
-	bucket, key := parseURI(obj.RemotePath)
+	bucket, key := parseURI(remotePath)
 	head, err := s.Client.HeadObject(context.TODO(), &s3.HeadObjectInput{
 		Bucket:    bucket,
 		Key:       key,
@@ -123,12 +125,13 @@ func (s *S3Storage) GetSHA256(obj StorageObject) (string, error) {
 
 }
 
-func (s *S3Storage) Upload(obj StorageObject) (*UploadResult, error) {
-	if !isValidURI(obj.RemotePath) {
-		err := errors.New(fmt.Sprintf("%s is not a valid S3 URI", obj.RemotePath))
+func (s *S3Remote) Upload(obj FileObject) (*UploadResult, error) {
+	remotePath, _ := url.JoinPath(s.Prefix, obj.LocalPath)
+	if !isValidS3URI(remotePath) {
+		err := errors.New(fmt.Sprintf("%s is not a valid S3 URI", remotePath))
 		return nil, err
 	}
-	bucket, key := parseURI(obj.RemotePath)
+	bucket, key := parseURI(remotePath)
 	ver, err := s.Client.GetBucketVersioning(
 		context.TODO(),
 		&s3.GetBucketVersioningInput{Bucket: bucket},
@@ -200,7 +203,7 @@ func parseURI(uri string) (*string, *string) {
 }
 
 // Check if the given URI matches the form s3://<bucket>/<key>
-func isValidURI(uri string) bool {
+func isValidS3URI(uri string) bool {
 	s3Uri := regexp.MustCompile(`s3\:\/\/[a-zA-Z0-9\-\.]+[a-zA-Z]\/\S*?$`)
 	return s3Uri.Match([]byte(uri))
 }

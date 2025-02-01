@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/jmsarn/sdvc/utils"
 	"github.com/spf13/cobra"
 	"gopkg.in/ini.v1"
 )
@@ -27,7 +28,7 @@ var initCmd = &cobra.Command{
 }
 
 func initializeProject(remote string, force bool) error {
-	configPath, err := getProjectConfigPath()
+	configPath, err := utils.ProjectConfigPath()
 	if err != nil {
 		return errors.New("Cannot find project root. Are you in a Git repository?")
 	}
@@ -37,7 +38,7 @@ func initializeProject(remote string, force bool) error {
 	if err != nil {
 		return errors.New(fmt.Sprintf("Cannot stat %s: %s\n", rootDir, err))
 	}
-	if exists(configDir) {
+	if utils.Exists(configDir) {
 		if force {
 			os.RemoveAll(configDir)
 		} else {

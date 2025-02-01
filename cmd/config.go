@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/jmsarn/sdvc/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -27,7 +28,7 @@ sdvc config core.remote new-default-remote`,
 		}
 		useLocal, _ := cmd.Flags().GetBool("local")
 		unset, _ := cmd.Flags().GetBool("unset")
-		cfg, err := readConfig(useLocal)
+		cfg, err := utils.ReadConfig(useLocal)
 		if err != nil {
 			return errors.New(fmt.Sprintf("Error reading %s: %s", cfg.Path, err))
 		}
@@ -35,7 +36,7 @@ sdvc config core.remote new-default-remote`,
 	},
 }
 
-func updateConfig(name, value string, cfg *Config, unset bool) error {
+func updateConfig(name, value string, cfg *utils.Config, unset bool) error {
 	split := strings.Split(name, ".")
 	sec, _ := cfg.File.GetSection(split[0])
 	key, err := sec.GetKey(split[1])

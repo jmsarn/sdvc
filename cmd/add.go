@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/jmsarn/sdvc/utils"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
 )
@@ -65,11 +66,11 @@ func addFile(path string) error {
 				fmt.Sprintf("Error writing SDVC file %s: %s\n", ptrPath, err),
 			)
 		}
-		cache, err := readCache()
+		cache, err := utils.ReadCache()
 		if err != nil {
 			return errors.New(fmt.Sprintf("Error reading cache file: %s", err))
 		}
-		cache.Files[rootRelativePath(path)] = fileInfo.SHA256
+		cache.Files[utils.RootRelativePath(path)] = fileInfo.SHA256
 		if err = cache.Save(); err != nil {
 			return errors.New(fmt.Sprintf("Error updating cache: %s", err))
 		}
@@ -98,7 +99,7 @@ func getPointerFile(path string) (*FilePointer, error) {
 	if !strings.HasSuffix(path, ".sdvc") {
 		path = fmt.Sprintf("%s.sdvc", path)
 	}
-	if exists(path) {
+	if utils.Exists(path) {
 		file, err := os.Open(path)
 		if err != nil {
 			return nil, err
@@ -116,7 +117,7 @@ func getPointerFile(path string) (*FilePointer, error) {
 
 func getFile(path string) (*FilePointer, error) {
 
-	hash, err := fileHash(path)
+	hash, err := utils.FileSHA256(path)
 	if err != nil {
 		return nil, err
 	}

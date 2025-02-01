@@ -6,9 +6,9 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"net/url"
 
-	"github.com/jmsarn/sdvc/storage"
+	"github.com/jmsarn/sdvc/remote"
+	"github.com/jmsarn/sdvc/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -25,52 +25,21 @@ This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	PreRun: toggleDebug,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return pushFile(args[0])
+		remoteName, _ := cmd.Flags().GetString("remote")
+		remote, err := remote.NewRemote(remoteName)
+		if err != nil {
+			return err
+		}
+		return pushFile(args[0], remoteName, remote)
 	},
 }
 
-func pushFile(path string) error {
-	cfg, err := readConfig(false)
-	if err != nil {
-		return errors.New(fmt.Sprintf("Error reading %s: %s", cfg.Path, err))
-	}
-	sec, _ := cfg.File.GetSection("core")
-	key, err := sec.GetKey("remote")
-	if err != nil {
-		return errors.New("No default remote specified")
-	}
-	remote, err := cfg.File.GetSection(fmt.Sprintf(`remote "%s"`, key))
-	if err != nil {
-		return errors.New(
-			fmt.Sprintf("Error reading configuration for remote %s\n", key),
-		)
-	}
-	remoteUrl, _ := remote.GetKey("url")
-
-	// Update remote configuration with values from config.local
-	cfgLocal, err := readConfig(true)
-	if err == nil {
-		remoteLocal, err := cfgLocal.File.GetSection(
-			fmt.Sprintf(`remote "%s"`, key),
-		)
-		if err == nil {
-			for k, v := range remoteLocal.KeysHash() {
-				if remote.HasKey(k) {
-					k_, _ := remote.GetKey(k)
-					k_.SetValue(v)
-				} else {
-					remote.NewKey(k, v)
-				}
-			}
-		}
-	}
-
-	remoteStorage := storage.NewStorage(remote)
+func pushFile(path, remoteName string, remoteStorage remote.Remote) error {
 	ptr, err := getPointerFile(path)
 	if err != nil {
 		return errors.New(fmt.Sprintf("Error reading SDVC file %s: %s", ptr.Path, err))
 	}
-	hash, err := fileHash(path)
+	hash, err := utils.FileSHA256(path)
 	if err != nil {
 		return errors.New(fmt.Sprintf("Error calculating hash for %s: %s", path, err))
 	}
@@ -79,12 +48,10 @@ func pushFile(path string) error {
 			fmt.Sprintf(`SHA256 of pointer and file don't match. Use sdvc add to stage latest changes to %s`, path),
 		)
 	}
-	remotePath, _ := url.JoinPath(remoteUrl.String(), rootRelativePath(path))
 	result, err := remoteStorage.Upload(
-		storage.StorageObject{
-			LocalPath:  path,
-			RemotePath: remotePath,
-			SHA256:     ptr.SHA256,
+		remote.FileObject{
+			LocalPath: utils.RootRelativePath(path),
+			SHA256:    ptr.SHA256,
 		},
 	)
 	if result == nil {
@@ -92,11 +59,9 @@ func pushFile(path string) error {
 		return nil
 	}
 	if err != nil {
-		return errors.New(
-			fmt.Sprintf("Error uploading %s to %s: %s\n", path, remotePath, err),
-		)
+		return err
 	}
-	ptr.Cloud[key.String()] = CloudInfo{
+	ptr.Cloud[remoteName] = CloudInfo{
 		ETag:      result.ETag,
 		VersionID: result.Version,
 	}
@@ -105,11 +70,11 @@ func pushFile(path string) error {
 			fmt.Sprintf("Error reading writing pointer file %s: %s", path, err),
 		)
 	}
-	cache, err := readCache()
+	cache, err := utils.ReadCache()
 	if err != nil {
 		return errors.New(fmt.Sprintf("Error reading cache file: %s", err))
 	}
-	cache.Files[rootRelativePath(path)] = ptr.SHA256
+	cache.Files[utils.RootRelativePath(path)] = ptr.SHA256
 	if err = cache.Save(); err != nil {
 		return errors.New(fmt.Sprintf("Error updating cache: %s", err))
 	}
@@ -128,4 +93,5 @@ func init() {
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 	// pushCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	pushCmd.Flags().String("remote", "default", "Remote destination of the file")
 }

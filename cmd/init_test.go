@@ -8,10 +8,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/jmsarn/sdvc/utils"
 )
 
 func cleanUpConfig() {
-	configPath, _ := getProjectConfigPath()
+	configPath, _ := utils.ProjectConfigPath()
 	configDir := filepath.Dir(configPath)
 	os.RemoveAll(configDir)
 }
@@ -56,7 +58,7 @@ func TestExecuteAddCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	configPath, _ := getProjectConfigPath()
+	configPath, _ := utils.ProjectConfigPath()
 	goldenFile := filepath.Join("test-data", "config.golden")
 	err = compareFiles(configPath, goldenFile)
 	if err != nil {
