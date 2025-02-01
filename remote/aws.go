@@ -63,7 +63,7 @@ func NewS3Remote(prefix string, storageConfig map[string]string) *S3Remote {
 	}
 }
 
-func (s *S3Remote) CheckLocalObject(obj FileObject) (bool, error) {
+func (r *S3Remote) CheckLocalObject(obj FileObject) (bool, error) {
 	file, err := os.Open(obj.LocalPath)
 	if err != nil {
 		return false, err
@@ -75,15 +75,15 @@ func (s *S3Remote) CheckLocalObject(obj FileObject) (bool, error) {
 		return false, err
 	}
 	localHash := hex.EncodeToString(hasher.Sum(nil))
-	remoteHash, err := s.GetSHA256(obj)
+	remoteHash, err := r.GetSHA256(obj)
 	if err != nil {
 		return false, err
 	}
 	return localHash == remoteHash, nil
 }
 
-func (s *S3Remote) Download(obj FileObject) error {
-	remotePath, _ := url.JoinPath(s.Prefix, obj.LocalPath)
+func (r *S3Remote) Download(obj FileObject) error {
+	remotePath, _ := url.JoinPath(r.Prefix, obj.LocalPath)
 	if !isValidS3URI(remotePath) {
 		return errors.New(fmt.Sprintf("%s is not a valid S3 URI", remotePath))
 	}
@@ -93,7 +93,7 @@ func (s *S3Remote) Download(obj FileObject) error {
 		return err
 	}
 	defer file.Close()
-	_, err = s.Downloader.Download(context.TODO(), file, &s3.GetObjectInput{
+	_, err = r.Downloader.Download(context.TODO(), file, &s3.GetObjectInput{
 		Bucket: bucket,
 		Key:    key,
 	})
@@ -107,13 +107,13 @@ func (s *S3Remote) Download(obj FileObject) error {
 	return nil
 }
 
-func (s *S3Remote) GetSHA256(obj FileObject) (string, error) {
-	remotePath, _ := url.JoinPath(s.Prefix, obj.LocalPath)
+func (r *S3Remote) GetSHA256(obj FileObject) (string, error) {
+	remotePath, _ := url.JoinPath(r.Prefix, obj.LocalPath)
 	if !isValidS3URI(remotePath) {
 		return "", os.ErrInvalid
 	}
 	bucket, key := parseURI(remotePath)
-	head, err := s.Client.HeadObject(context.TODO(), &s3.HeadObjectInput{
+	head, err := r.Client.HeadObject(context.TODO(), &s3.HeadObjectInput{
 		Bucket:    bucket,
 		Key:       key,
 		VersionId: aws.String(obj.Version),
@@ -125,14 +125,14 @@ func (s *S3Remote) GetSHA256(obj FileObject) (string, error) {
 
 }
 
-func (s *S3Remote) Upload(obj FileObject) (*UploadResult, error) {
-	remotePath, _ := url.JoinPath(s.Prefix, obj.LocalPath)
+func (r *S3Remote) Upload(obj FileObject) (*UploadResult, error) {
+	remotePath, _ := url.JoinPath(r.Prefix, obj.LocalPath)
 	if !isValidS3URI(remotePath) {
 		err := errors.New(fmt.Sprintf("%s is not a valid S3 URI", remotePath))
 		return nil, err
 	}
 	bucket, key := parseURI(remotePath)
-	ver, err := s.Client.GetBucketVersioning(
+	ver, err := r.Client.GetBucketVersioning(
 		context.TODO(),
 		&s3.GetBucketVersioningInput{Bucket: bucket},
 	)
@@ -149,7 +149,7 @@ func (s *S3Remote) Upload(obj FileObject) (*UploadResult, error) {
 		return nil, err
 	}
 	// Check if current file is already uploaded
-	versions, _ := s.Client.ListObjectVersions(
+	versions, _ := r.Client.ListObjectVersions(
 		context.TODO(),
 		&s3.ListObjectVersionsInput{
 			Bucket: bucket,
@@ -158,7 +158,7 @@ func (s *S3Remote) Upload(obj FileObject) (*UploadResult, error) {
 	)
 	for _, v := range versions.Versions {
 		v_ := v.VersionId
-		head, _ := s.Client.HeadObject(
+		head, _ := r.Client.HeadObject(
 			context.TODO(),
 			&s3.HeadObjectInput{
 				Bucket:       bucket,
@@ -176,7 +176,7 @@ func (s *S3Remote) Upload(obj FileObject) (*UploadResult, error) {
 		return nil, err
 	}
 	defer file.Close()
-	result, err := s.Uploader.Upload(context.TODO(), &s3.PutObjectInput{
+	result, err := r.Uploader.Upload(context.TODO(), &s3.PutObjectInput{
 		Bucket:            bucket,
 		Key:               key,
 		Body:              file,
@@ -188,13 +188,12 @@ func (s *S3Remote) Upload(obj FileObject) (*UploadResult, error) {
 		return nil, err
 	}
 	slog.Debug(fmt.Sprintf("Upload result %+v", result))
-	r := &UploadResult{
+	return &UploadResult{
 		ETag:    *result.ETag,
 		Path:    result.Location,
 		SHA256:  *result.ChecksumSHA256,
 		Version: *result.VersionID,
-	}
-	return r, nil
+	}, nil
 }
 
 func parseURI(uri string) (*string, *string) {
