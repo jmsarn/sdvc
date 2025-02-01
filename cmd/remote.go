@@ -36,7 +36,14 @@ var remoteAddCmd = &cobra.Command{
 		if err != nil {
 			return errors.New(fmt.Sprintf("Error reading %s: %s", cfg.Path, err))
 		}
-		return addRemote(name, url, cfg)
+		cfg, err = addRemote(name, url, cfg)
+		if err != nil {
+			return err
+		}
+		if err := cfg.Save(); err != nil {
+			return errors.New(fmt.Sprintf("Error saving %s: %s", cfg.Path, err))
+		}
+		return nil
 	},
 }
 
@@ -115,19 +122,16 @@ var remoteRenameCmd = &cobra.Command{
 	},
 }
 
-func addRemote(name, url string, cfg *utils.Config) error {
-	if _, err := cfg.File.GetSection(fmt.Sprintf(`remote "%s"`, name)); err != nil {
-		return errors.New(fmt.Sprintf(
+func addRemote(name, url string, cfg *utils.Config) (*utils.Config, error) {
+	if _, err := cfg.File.GetSection(fmt.Sprintf(`remote "%s"`, name)); err == nil {
+		return nil, errors.New(fmt.Sprintf(
 			"Remote %s already exists, use remote modify to edit remote configuration",
 			name,
 		))
 	}
 	sec, _ := cfg.File.NewSection(fmt.Sprintf(`remote "%s"`, name))
 	sec.NewKey("url", url)
-	if err := cfg.Save(); err != nil {
-		return errors.New(fmt.Sprintf("Error saving %s: %s", cfg.Path, err))
-	}
-	return nil
+	return cfg, nil
 }
 
 func listRemotes(cfg *utils.Config) error {
