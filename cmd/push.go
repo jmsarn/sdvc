@@ -23,7 +23,7 @@ and usage of using your command. For example:
 Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
-	PreRun: toggleDebug,
+	PreRun: toggleVerbose,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		remoteName, _ := cmd.Flags().GetString("remote")
 		remote, err := remote.NewRemote(remoteName)
@@ -54,12 +54,12 @@ func pushFile(path, remoteName string, remoteStorage remote.Remote) error {
 			SHA256:    ptr.SHA256,
 		},
 	)
+	if err != nil {
+		return err
+	}
 	if result == nil {
 		fmt.Println("File already exists in remote, skipping upload")
 		return nil
-	}
-	if err != nil {
-		return err
 	}
 	ptr.Cloud[remoteName] = CloudInfo{
 		ETag:      result.ETag,

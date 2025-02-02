@@ -17,7 +17,7 @@ var remoteCmd = &cobra.Command{
 	Use:    "remote",
 	Short:  "Setup and manage data remotes",
 	Long:   `Setup and manage data remotes`,
-	PreRun: toggleDebug,
+	PreRun: toggleVerbose,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("remote called")
 	},

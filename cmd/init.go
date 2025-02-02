@@ -19,7 +19,7 @@ var initCmd = &cobra.Command{
 	Use:    "init",
 	Short:  "Initialize SDVC in the current project. Expects project to be a Git repository",
 	Long:   "Initialize SDVC in the current ptoject. Expects project to be a Git repository",
-	PreRun: toggleDebug,
+	PreRun: toggleVerbose,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		remote, _ := cmd.Flags().GetString("remote")
 		force, _ := cmd.Flags().GetBool("force")

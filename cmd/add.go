@@ -38,7 +38,7 @@ var addCmd = &cobra.Command{
 	Args:   cobra.ExactArgs(1),
 	Short:  "Track data files or directories with SDVC",
 	Long:   "Track data files or directories with SDVC",
-	PreRun: toggleDebug,
+	PreRun: toggleVerbose,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return addFile(args[0])
 	},

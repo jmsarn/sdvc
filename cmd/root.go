@@ -20,9 +20,9 @@ is left to the cloud storage provider (e.g., S3) so ensure that the target
 storage location has versioning enabled.`,
 }
 
-func toggleDebug(cmd *cobra.Command, _ []string) {
-	debug, _ := cmd.Flags().GetBool("debug")
-	if debug {
+func toggleVerbose(cmd *cobra.Command, _ []string) {
+	verbose, _ := cmd.Flags().GetBool("verbose")
+	if verbose {
 		slog.SetLogLoggerLevel(slog.LevelDebug)
 	}
 }
@@ -41,9 +41,8 @@ func init() {
 	// will be global for your application.
 
 	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.sdvc.yaml)")
-	rootCmd.PersistentFlags().Bool("debug", false, "Enable debug logging")
+	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "Turn on verbose logging")
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }

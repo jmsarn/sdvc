@@ -19,7 +19,7 @@ var configCmd = &cobra.Command{
 	Long: `Get or set the given configuration value:
 
 sdvc config core.remote new-default-remote`,
-	PreRun: toggleDebug,
+	PreRun: toggleVerbose,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
 		value := ""
