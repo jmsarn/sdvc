@@ -1,8 +1,9 @@
 package remote
 
 import (
-	"errors"
 	"fmt"
+	"log/slog"
+
 	"github.com/jmsarn/sdvc/utils"
 )
 
@@ -31,10 +32,9 @@ func NewRemote(remoteName string) (Remote, error) {
 	if err != nil {
 		return nil, err
 	}
+	config := cfg.KeysHash()
+	slog.Debug(fmt.Sprintf("+%v", config))
 	url, _ := cfg.GetKey("url")
-	if isValidS3URI(url.String()) {
-		s := NewS3Remote(url.String(), cfg.KeysHash())
-		return s, nil
-	}
-	return nil, errors.New(fmt.Sprintf("Invalid remote URL: %s check your config", url))
+	s := NewS3Remote(url.String(), config)
+	return s, nil
 }

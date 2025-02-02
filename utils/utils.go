@@ -2,7 +2,7 @@ package utils
 
 import (
 	"crypto/sha256"
-	"encoding/hex"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -179,6 +179,6 @@ func FileSHA256(path string) (string, error) {
 	if _, err := io.Copy(hasher, file); err != nil {
 		return "", err
 	}
-	hash := hex.EncodeToString(hasher.Sum(nil))
-	return hash, nil
+	encoded := base64.StdEncoding.EncodeToString(hasher.Sum(nil))
+	return encoded, nil
 }

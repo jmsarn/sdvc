@@ -2,12 +2,8 @@ package remote
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/url"
 	"os"
@@ -19,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/jmsarn/sdvc/utils"
 )
 
 type S3Remote struct {
@@ -44,7 +41,6 @@ func NewS3Remote(prefix string, storageConfig map[string]string) *S3Remote {
 	if endpoint, ok := storageConfig["endpointurl"]; ok {
 		useSSL, _ := strconv.ParseBool(storageConfig["use_ssl"])
 		slog.Debug(fmt.Sprintf("Base endpoint: %s", endpoint))
-		// cfg.BaseEndpoint = aws.String(endpoint)
 		client = s3.NewFromConfig(cfg, func(o *s3.Options) {
 			o.BaseEndpoint = aws.String(endpoint)
 			o.UsePathStyle = true
@@ -64,17 +60,7 @@ func NewS3Remote(prefix string, storageConfig map[string]string) *S3Remote {
 }
 
 func (r *S3Remote) CheckLocalObject(obj FileObject) (bool, error) {
-	file, err := os.Open(obj.LocalPath)
-	if err != nil {
-		return false, err
-	}
-	defer file.Close()
-
-	hasher := sha256.New()
-	if _, err := io.Copy(hasher, file); err != nil {
-		return false, err
-	}
-	localHash := hex.EncodeToString(hasher.Sum(nil))
+	localHash, _ := utils.FileSHA256(obj.LocalPath)
 	remoteHash, err := r.GetSHA256(obj)
 	if err != nil {
 		return false, err
@@ -167,7 +153,8 @@ func (r *S3Remote) Upload(obj FileObject) (*UploadResult, error) {
 				ChecksumMode: types.ChecksumModeEnabled,
 			},
 		)
-		if *head.ChecksumSHA256 == hexToBase64(obj.SHA256) {
+		slog.Debug(fmt.Sprintf("%+v", *head))
+		if head.Metadata["sha256"] == obj.SHA256 {
 			return nil, nil
 		}
 	}
@@ -181,8 +168,8 @@ func (r *S3Remote) Upload(obj FileObject) (*UploadResult, error) {
 		Key:               key,
 		Body:              file,
 		ChecksumAlgorithm: types.ChecksumAlgorithmSha256,
-		ChecksumSHA256:    aws.String(hexToBase64(obj.SHA256)),
-		Metadata:          map[string]string{"managedBy": "SDVC"},
+		ChecksumSHA256:    aws.String(obj.SHA256),
+		Metadata:          map[string]string{"managedBy": "SDVC", "sha256": obj.SHA256},
 	})
 	if err != nil {
 		return nil, err
@@ -205,10 +192,4 @@ func parseURI(uri string) (*string, *string) {
 func isValidS3URI(uri string) bool {
 	s3Uri := regexp.MustCompile(`s3\:\/\/[a-zA-Z0-9\-\.]+[a-zA-Z]\/\S*?$`)
 	return s3Uri.Match([]byte(uri))
-}
-
-func hexToBase64(objHash string) string {
-	raw, _ := hex.DecodeString(objHash)
-	encoded := base64.StdEncoding.EncodeToString(raw)
-	return encoded
 }
