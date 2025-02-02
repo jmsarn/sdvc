@@ -6,6 +6,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jmsarn/sdvc/remote"
 	"github.com/jmsarn/sdvc/utils"
@@ -34,25 +35,32 @@ to quickly create a Cobra application.`,
 }
 
 func pullFile(path, remoteName string, remoteStorage remote.Remote) error {
+	path = strings.TrimSuffix(path, ".sdvc")
 	ptr, err := getPointerFile(path)
 	if err != nil {
 		return errors.New(fmt.Sprintf("Error reading SDVC file %s: %s", ptr.Path, err))
-	}
-	hash, err := utils.FileSHA256(path)
-	if err != nil {
-		return errors.New(fmt.Sprintf("Error calculating hash for %s: %s", path, err))
 	}
 	cache, err := utils.ReadCache()
 	if err != nil {
 		return errors.New(fmt.Sprintf("Error reading cache file: %s", err))
 	}
-	if cache.Files[utils.RootRelativePath(path)] != hash {
-		return errors.New(
-			fmt.Sprintf(
-				`SHA256 of cache and file don't match. Did you modify %s without pushing?`,
-				path,
-			),
-		)
+	if utils.Exists(path) {
+		hash, err := utils.FileSHA256(path)
+		if err != nil {
+			return errors.New(fmt.Sprintf("Error calculating hash for %s: %s", path, err))
+		}
+		if cache.Files[utils.RootRelativePath(path)] == ptr.SHA256 {
+			fmt.Println("File already exists locally, skipping download")
+			return nil
+		}
+		if cache.Files[utils.RootRelativePath(path)] != hash {
+			return errors.New(
+				fmt.Sprintf(
+					`SHA256 of cache and file don't match. Did you modify %s without pushing?`,
+					path,
+				),
+			)
+		}
 	}
 	if err := remoteStorage.Download(
 		remote.FileObject{
@@ -82,4 +90,5 @@ func init() {
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 	// pullCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	pullCmd.Flags().String("remote", "default", "Remote to pull file from")
 }

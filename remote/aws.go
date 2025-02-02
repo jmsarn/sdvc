@@ -73,6 +73,13 @@ func (r *S3Remote) Download(obj FileObject) error {
 	if !isValidS3URI(remotePath) {
 		return errors.New(fmt.Sprintf("%s is not a valid S3 URI", remotePath))
 	}
+	remoteSHA256, err := r.GetSHA256(obj)
+	if err != nil {
+		return err
+	}
+	if obj.SHA256 != remoteSHA256 {
+		return errors.New("Hash between remote object and pointer file do not match")
+	}
 	bucket, key := parseURI(remotePath)
 	file, err := os.Create(obj.LocalPath)
 	if err != nil {
@@ -80,8 +87,9 @@ func (r *S3Remote) Download(obj FileObject) error {
 	}
 	defer file.Close()
 	_, err = r.Downloader.Download(context.TODO(), file, &s3.GetObjectInput{
-		Bucket: bucket,
-		Key:    key,
+		Bucket:    bucket,
+		Key:       key,
+		VersionId: aws.String(obj.Version),
 	})
 	if err != nil {
 		var noKey *types.NoSuchKey
@@ -107,8 +115,7 @@ func (r *S3Remote) GetSHA256(obj FileObject) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return *head.ChecksumSHA256, nil
-
+	return head.Metadata["sha256"], nil
 }
 
 func (r *S3Remote) Upload(obj FileObject) (*UploadResult, error) {
