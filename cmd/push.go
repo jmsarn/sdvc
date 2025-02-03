@@ -6,6 +6,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jmsarn/sdvc/remote"
 	"github.com/jmsarn/sdvc/utils"
@@ -35,6 +36,7 @@ to quickly create a Cobra application.`,
 }
 
 func pushFile(path, remoteName string, remoteStorage remote.Remote) error {
+	path = strings.TrimSuffix(path, ".sdvc")
 	ptr, err := getPointerFile(path)
 	if err != nil {
 		return errors.New(fmt.Sprintf("Error reading SDVC file %s: %s", ptr.Path, err))
