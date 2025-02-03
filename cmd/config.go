@@ -32,20 +32,28 @@ sdvc config core.remote new-default-remote`,
 		if err != nil {
 			return errors.New(fmt.Sprintf("Error reading %s: %s", cfg.Path, err))
 		}
-		return updateConfig(name, value, cfg, unset)
+		cfg, err = updateConfig(name, value, cfg, unset)
+		if err != nil {
+			return err
+		}
+		if err = cfg.Save(); err != nil {
+			return errors.New(fmt.Sprintf("Error saving %s: %s\n", cfg.Path, err))
+		}
+		return nil
 	},
 }
 
-func updateConfig(name, value string, cfg *utils.Config, unset bool) error {
+func updateConfig(name, value string, cfg *utils.Config, unset bool) (*utils.Config, error) {
 	split := strings.Split(name, ".")
 	sec, _ := cfg.File.GetSection(split[0])
 	key, err := sec.GetKey(split[1])
 	if value == "" {
 		if err != nil {
-			return errors.New(
+			return nil, errors.New(
 				fmt.Sprintf("Key %s not found in config section %s\n", split[1], split[0]),
 			)
 		}
+		fmt.Print(key.String())
 	} else {
 		if unset {
 			if err == nil {
@@ -58,11 +66,8 @@ func updateConfig(name, value string, cfg *utils.Config, unset bool) error {
 				key.SetValue(value)
 			}
 		}
-		if err = cfg.Save(); err != nil {
-			return errors.New(fmt.Sprintf("Error saving %s: %s\n", cfg.Path, err))
-		}
 	}
-	return nil
+	return cfg, nil
 }
 
 func init() {
