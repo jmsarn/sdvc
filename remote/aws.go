@@ -21,17 +21,23 @@ import (
 	"github.com/schollz/progressbar/v3"
 )
 
-type S3Remote struct {
-	Client     *s3.Client
-	Downloader *manager.Downloader
-	Prefix     string
-	Uploader   *manager.Uploader
+type progressWriter struct {
+	w   io.WriterAt
+	bar *progressbar.ProgressBar
 }
 
-func wrapWithProgress(reader io.Reader, size int64) io.Reader {
+func (pw *progressWriter) WriteAt(p []byte, off int64) (int, error) {
+	n, err := pw.w.WriteAt(p, off)
+	if n > 0 {
+		pw.bar.Add(n)
+	}
+	return n, err
+}
+
+func newProgressBar(description, completionMessage string, size int64) *progressbar.ProgressBar {
 	bar := progressbar.NewOptions(int(size),
 		progressbar.OptionSetWidth(15),
-		progressbar.OptionSetDescription("Uploading..."),
+		progressbar.OptionSetDescription(description),
 		progressbar.OptionSetTheme(progressbar.Theme{
 			Saucer:        "=",
 			SaucerHead:    ">",
@@ -40,14 +46,32 @@ func wrapWithProgress(reader io.Reader, size int64) io.Reader {
 			BarEnd:        "]",
 		}),
 		progressbar.OptionOnCompletion(func() {
-			fmt.Println("\nUpload completed!")
+			fmt.Printf("\n%s\n", completionMessage)
 		}),
 		progressbar.OptionShowBytes(true),
 		progressbar.OptionSetPredictTime(true),
 		progressbar.OptionThrottle(65*time.Millisecond),
 	)
+	return bar
+}
+
+func wrapReaderWithProgress(reader io.Reader, size int64) io.Reader {
+	bar := newProgressBar("Uploading", "Upload complete!", size)
 	r := progressbar.NewReader(reader, bar)
 	return &r
+}
+
+func wrapWriterWithProgress(writer io.WriterAt, size int64) io.WriterAt {
+	bar := newProgressBar("Downloading", "Download complete!", size)
+	w := progressWriter{writer, bar}
+	return &w
+}
+
+type S3Remote struct {
+	Client     *s3.Client
+	Downloader *manager.Downloader
+	Prefix     string
+	Uploader   *manager.Uploader
 }
 
 func NewS3Remote(prefix string, storageConfig map[string]string) *S3Remote {
@@ -98,23 +122,29 @@ func (r *S3Remote) Download(obj FileObject) error {
 	if !isValidS3URI(remotePath) {
 		return errors.New(fmt.Sprintf("%s is not a valid S3 URI", remotePath))
 	}
-	remoteSHA256, err := r.GetSHA256(obj)
+	bucket, key := parseURI(remotePath)
+	head, err := r.Client.HeadObject(context.TODO(), &s3.HeadObjectInput{
+		Bucket:    bucket,
+		Key:       key,
+		VersionId: aws.String(obj.Version),
+	})
 	if err != nil {
 		return err
 	}
-	if obj.SHA256 != remoteSHA256 {
+	if obj.SHA256 != head.Metadata["sha256"] {
 		return errors.New("Hash between remote object and pointer file do not match")
 	}
-	bucket, key := parseURI(remotePath)
-	file, err := os.Create(obj.LocalPath)
+	file, err := os.OpenFile(obj.LocalPath, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
-	_, err = r.Downloader.Download(context.TODO(), file, &s3.GetObjectInput{
-		Bucket:    bucket,
-		Key:       key,
-		VersionId: aws.String(obj.Version),
+	destination := wrapWriterWithProgress(file, *head.ContentLength)
+	_, err = r.Downloader.Download(context.TODO(), destination, &s3.GetObjectInput{
+		Bucket:       bucket,
+		Key:          key,
+		VersionId:    aws.String(obj.Version),
+		ChecksumMode: types.ChecksumModeEnabled,
 	})
 	if err != nil {
 		var noKey *types.NoSuchKey
@@ -195,12 +225,14 @@ func (r *S3Remote) Upload(obj FileObject) (*UploadResult, error) {
 	}
 	defer file.Close()
 	fileInfo, _ := file.Stat()
-	body := wrapWithProgress(file, fileInfo.Size())
+	body := wrapReaderWithProgress(file, fileInfo.Size())
 	result, err := r.Uploader.Upload(context.TODO(), &s3.PutObjectInput{
-		Bucket:   bucket,
-		Key:      key,
-		Body:     body,
-		Metadata: map[string]string{"managedBy": "SDVC", "sha256": obj.SHA256},
+		Bucket:            bucket,
+		Key:               key,
+		Body:              body,
+		ChecksumSHA256:    &obj.SHA256,
+		ChecksumAlgorithm: types.ChecksumAlgorithmSha256,
+		Metadata:          map[string]string{"managedBy": "SDVC", "sha256": obj.SHA256},
 	})
 	if err != nil {
 		return nil, err
