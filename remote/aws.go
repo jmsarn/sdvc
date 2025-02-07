@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/url"
 	"os"
 	"regexp"
 	"strconv"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -16,6 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/jmsarn/sdvc/utils"
+	"github.com/schollz/progressbar/v3"
 )
 
 type S3Remote struct {
@@ -23,6 +26,28 @@ type S3Remote struct {
 	Downloader *manager.Downloader
 	Prefix     string
 	Uploader   *manager.Uploader
+}
+
+func wrapWithProgress(reader io.Reader, size int64) io.Reader {
+	bar := progressbar.NewOptions(int(size),
+		progressbar.OptionSetWidth(15),
+		progressbar.OptionSetDescription("Uploading..."),
+		progressbar.OptionSetTheme(progressbar.Theme{
+			Saucer:        "=",
+			SaucerHead:    ">",
+			SaucerPadding: " ",
+			BarStart:      "[",
+			BarEnd:        "]",
+		}),
+		progressbar.OptionOnCompletion(func() {
+			fmt.Println("\nUpload completed!")
+		}),
+		progressbar.OptionShowBytes(true),
+		progressbar.OptionSetPredictTime(true),
+		progressbar.OptionThrottle(65*time.Millisecond),
+	)
+	r := progressbar.NewReader(reader, bar)
+	return &r
 }
 
 func NewS3Remote(prefix string, storageConfig map[string]string) *S3Remote {
@@ -154,10 +179,9 @@ func (r *S3Remote) Upload(obj FileObject) (*UploadResult, error) {
 		head, _ := r.Client.HeadObject(
 			context.TODO(),
 			&s3.HeadObjectInput{
-				Bucket:       bucket,
-				Key:          key,
-				VersionId:    v_,
-				ChecksumMode: types.ChecksumModeEnabled,
+				Bucket:    bucket,
+				Key:       key,
+				VersionId: v_,
 			},
 		)
 		slog.Debug(fmt.Sprintf("%+v", *head))
@@ -170,13 +194,13 @@ func (r *S3Remote) Upload(obj FileObject) (*UploadResult, error) {
 		return nil, err
 	}
 	defer file.Close()
+	fileInfo, _ := file.Stat()
+	body := wrapWithProgress(file, fileInfo.Size())
 	result, err := r.Uploader.Upload(context.TODO(), &s3.PutObjectInput{
-		Bucket:            bucket,
-		Key:               key,
-		Body:              file,
-		ChecksumAlgorithm: types.ChecksumAlgorithmSha256,
-		ChecksumSHA256:    aws.String(obj.SHA256),
-		Metadata:          map[string]string{"managedBy": "SDVC", "sha256": obj.SHA256},
+		Bucket:   bucket,
+		Key:      key,
+		Body:     body,
+		Metadata: map[string]string{"managedBy": "SDVC", "sha256": obj.SHA256},
 	})
 	if err != nil {
 		return nil, err
@@ -185,7 +209,7 @@ func (r *S3Remote) Upload(obj FileObject) (*UploadResult, error) {
 	return &UploadResult{
 		ETag:    *result.ETag,
 		Path:    result.Location,
-		SHA256:  *result.ChecksumSHA256,
+		SHA256:  obj.SHA256,
 		Version: *result.VersionID,
 	}, nil
 }
