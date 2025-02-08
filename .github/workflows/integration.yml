@@ -1,0 +1,56 @@
+name: integration
+
+on: [push]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      localstack:
+        image: localstack/localstack:latest
+        env:
+          SERVICES: s3
+        ports:
+          - 4566:4566
+        options: >-
+          --health-cmd "curl -f http://localhost:4566/_localstack/health"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
+      REMOTE_NAME: test-bucket
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup S3
+        run: |
+          uvx --from awscli-local awslocal s3 mb s3://${REMOTE_NAME}
+          uvx --from awscli-local awslocal s3api \
+            put-bucket-versioning \
+            --bucket ${REMOTE_NAME} \
+            --versioning-configuration Status=Enabled
+
+      - name: Run tests
+        run: |
+          go build .
+          ./sdvc init --remote s3://${REMOTE_NAME}
+          ./sdvc remote modify default --local endpointurl http://localhost:4566
+          ./sdvc remote modify default --local use_ssl false
+          mkdir data
+          echo "test" > data/test.txt
+          ./sdvc add data/test.txt
+          ./sdvc push data/test.txt
+          rm data/test.txt
+          ./sdvc pull data/test.txt.sdvc
