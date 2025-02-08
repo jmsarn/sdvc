@@ -15,15 +15,10 @@ import (
 
 // pushCmd represents the push command
 var pushCmd = &cobra.Command{
-	Use:   "push file",
-	Args:  cobra.ExactArgs(1),
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Use:    "push file",
+	Args:   cobra.ExactArgs(1),
+	Short:  "Upload tracked files or directories to remote storage",
+	Long:   "Upload tracked files or directories to remote storage",
 	PreRun: toggleVerbose,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		remoteName, _ := cmd.Flags().GetString("remote")
